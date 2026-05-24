@@ -18,21 +18,45 @@ data = r.json()
 results = []
 
 for item in data["_embedded"]["estates"]:
+
     name = item.get("name", "")
     price = item.get("price", 0)
 
-    seo = item.get("seo", {})
-    category = seo.get("category_main_cb", "byt")
-    locality = seo.get("locality", "praha")
+    area = item.get("usable_area", 0)
 
-    hash_id = item.get("hash_id", "")
+    if not area:
+        continue
 
-    link = f"https://www.sreality.cz/detail/prodej/{category}/{locality}/{hash_id}"
+    price_m2 = price / area
+
+    # velmi hrubý průměr Praha
+    market_price_m2 = 140000
+
+    discount = (
+        (market_price_m2 - price_m2)
+        / market_price_m2
+    ) * 100
+
+    if discount < 20:
+        continue
+
+    link = item.get("url", "")
 
     results.append(
-        f"{name} - {price} Kč\n{link}\n"
-    )
+        f"""
+{name}
 
+Cena: {price:,} Kč
+Plocha: {area} m²
+Cena/m²: {int(price_m2):,} Kč
+
+Pod trhem: {int(discount)} %
+
+{link}
+
+-------------------
+"""
+    )
 if results:
     body = "\n".join(results)
 
