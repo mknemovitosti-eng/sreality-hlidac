@@ -5,101 +5,64 @@ from email.mime.text import MIMEText
 import os
 import re
 
-URL = "https://www.sreality.cz/api/cs/v2/estates"
+SEARCH_URL = "https://www.sreality.cz/hledani/prodej/byty"
 
-params = {
-    "category_main_cb": 1,
-    "category_type_cb": 1,
-    "per_page": 20
+headers = {
+    "User-Agent": "Mozilla/5.0"
 }
 
-r = requests.get(URL, params=params)
+r = requests.get(SEARCH_URL, headers=headers)
 
-data = r.json()
+html = r.text
+
+soup = BeautifulSoup(html, "html.parser")
 
 results = []
 
-# velmi hrubé benchmarky
-MARKET_PRICES = {
-    "praha": 140000,
-    "brno": 120000,
-    "ostrava": 65000,
-    "plzen": 90000,
-    "olomouc": 95000
-}
+cards = soup.find_all("a")
 
-for item in data["_embedded"]["estates"]:
+for card in cards:
 
-    name = item.get("name", "")
-    locality = item.get("locality", "")
-    price = item.get("price", 0)
+    href = card.get("href", "")
 
-    # vytáhne m² z názvu
-    match = re.search(r'(\d+)\s*m²', name)
-
-    if not match:
+    if "/detail/prodej/byt/" not in href:
         continue
 
-    area = int(match.group(1))
+    title = card.get_text(" ", strip=True)
 
-    if area == 0:
+    if len(title) < 10:
         continue
 
-    price_m2 = int(price / area)
+    full_link = "https://www.sreality.cz" + href
 
-    locality_lower = locality.lower()
+    # zkusí vytáhnout cenu
+    price_match = re.search(r'(\d[\d\s]+)\s*Kč', title)
 
-    market_price = 100000
-
-    for city, benchmark in MARKET_PRICES.items():
-        if city in locality_lower:
-            market_price = benchmark
-            break
-
-    discount = int(
-        ((market_price - price_m2) / market_price) * 100
-    )
-
-    # jen zajímavé nabídky
-    if discount < 20:
-        continue
-
-    hash_id = item.get("hash_id")
-
-    seo = item.get("seo", {})
-    seo_locality = seo.get("locality", "")
-
-    link = (
-        f"https://www.sreality.cz/detail/prodej/byt/"
-        f"{seo_locality}/{hash_id}"
-    )
+    price_text = price_match.group(1) if price_match else "?"
 
     results.append(
         f"""
-{name}
+{title}
 
-Lokalita: {locality}
+Cena: {price_text} Kč
 
-Cena: {price:,} Kč
-Plocha: {area} m²
-Cena za m²: {price_m2:,} Kč
-
-Pod trhem: {discount} %
-
-{link}
+{full_link}
 
 ----------------------------------------
 """
     )
 
-if results:
-    body = "\n".join(results)
-else:
-    body = "Žádné byty 20 % pod trhem nenalezeny."
+# odstranění duplicit
+results = list(dict.fromkeys(results))
+
+body = "\n".join(results[:20])
+
+if not body:
+    body = "Žádné výsledky."
 
 msg = MIMEText(body)
 
-msg["Subject"] = "Sreality investiční alert"
+msg["Subject"] = "Sreality REAL alert"
 msg["From"] = os.environ["SMTP_USER"]
 msg["To"] = os.environ["EMAIL_TO"]
 
