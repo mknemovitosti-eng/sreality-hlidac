@@ -6,13 +6,13 @@ import os
 URL = "https://www.sreality.cz/api/cs/v2/estates"
 
 params = {
-    "category_main_cb": 1,
-    "category_type_cb": 1,
-    "locality": "Praha",
-    "per_page": 10
+    "category_main_cb": 1,   # byty
+    "category_type_cb": 1,   # prodej
+    "per_page": 20
 }
 
 r = requests.get(URL, params=params)
+
 data = r.json()
 
 results = []
@@ -27,50 +27,53 @@ for item in data["_embedded"]["estates"]:
     if not area:
         continue
 
-    price_m2 = price / area
+    price_m2 = int(price / area)
 
-    # velmi hrubý průměr Praha
-    market_price_m2 = 140000
-
-    discount = (
-        (market_price_m2 - price_m2)
-        / market_price_m2
-    ) * 100
-
-    if discount < 20:
-        continue
+    locality = item.get("locality", "Neznámá lokalita")
 
     link = item.get("url", "")
+
+    if not link:
+        hash_id = item.get("hash_id", "")
+        link = f"https://www.sreality.cz/detail/{hash_id}"
 
     results.append(
         f"""
 {name}
 
+Lokalita: {locality}
+
 Cena: {price:,} Kč
 Plocha: {area} m²
-Cena/m²: {int(price_m2):,} Kč
-
-Pod trhem: {int(discount)} %
+Cena za m²: {price_m2:,} Kč
 
 {link}
 
--------------------
+----------------------------------------
 """
     )
+
 if results:
+
     body = "\n".join(results)
 
-    msg = MIMEText(body)
-    msg["Subject"] = "Sreality alert"
-    msg["From"] = os.environ["SMTP_USER"]
-    msg["To"] = os.environ["EMAIL_TO"]
+else:
 
-    server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+    body = "Žádné nové výsledky."
 
-    server.login(
-        os.environ["SMTP_USER"],
-        os.environ["SMTP_PASSWORD"]
-    )
+msg = MIMEText(body)
 
-    server.send_message(msg)
-    server.quit()
+msg["Subject"] = "Sreality alert"
+msg["From"] = os.environ["SMTP_USER"]
+msg["To"] = os.environ["EMAIL_TO"]
+
+server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+
+server.login(
+    os.environ["SMTP_USER"],
+    os.environ["SMTP_PASSWORD"]
+)
+
+server.send_message(msg)
+
+server.quit()
