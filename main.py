@@ -18,15 +18,20 @@ data = r.json()
 results = []
 
 for item in data["_embedded"]["estates"]:
-  name = item.get("name", "")
-price = item.get("price", 0)
+    name = item.get("name", "")
+    price = item.get("price", 0)
 
-hash_id = item.get("hash_id", "")
-link = f"https://www.sreality.cz/detail/prodej/byt/{hash_id}"
+    seo = item.get("seo", {})
+    category = seo.get("category_main_cb", "byt")
+    locality = seo.get("locality", "praha")
 
-results.append(
-    f"{name} - {price} Kč\n{link}\n"
-)
+    hash_id = item.get("hash_id", "")
+
+    link = f"https://www.sreality.cz/detail/prodej/{category}/{locality}/{hash_id}"
+
+    results.append(
+        f"{name} - {price} Kč\n{link}\n"
+    )
 
 if results:
     body = "\n".join(results)
